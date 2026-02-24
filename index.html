@@ -3,52 +3,152 @@
 <head>
     <meta charset="UTF-8">
     <title>APAC Messaging Chat - UAT</title>
+    <style>
+        /* Queue position styling */
+        #queue-position-container {
+            position: fixed;
+            bottom: 100px;
+            right: 20px;
+            background: #0176d3;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            font-family: 'Salesforce Sans', Arial, sans-serif;
+            font-size: 14px;
+            display: none;
+            z-index: 9999;
+            max-width: 300px;
+        }
+
+        #queue-position-container.visible {
+            display: block;
+        }
+
+        .queue-position-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .queue-position-number {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .queue-position-message {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+    </style>
 </head>
-
 <body>
+    <h3>Chat Support APAC - UAT</h3>
 
-<h3>Chat Support APAC - UAT</h3>
+    <!-- Queue Position Display -->
+    <div id="queue-position-container">
+        <div class="queue-position-title">Your Position in Queue</div>
+        <div class="queue-position-number" id="queue-position-number">-</div>
+        <div class="queue-position-message" id="queue-position-message">Please wait, an agent will be with you shortly.</div>
+    </div>
 
-<script type="text/javascript">
-    function initEmbeddedMessaging() {
-        try {
-            embeddedservice_bootstrap.settings.language = 'en_US';
+    <script type="text/javascript">
+        function initEmbeddedMessaging() {
+            try {
+                embeddedservice_bootstrap.settings.language = 'en_US';
 
-            embeddedservice_bootstrap.init(
-                '00DDh0000003ik2', // Org Id (UAT)
-                'APAC_Chat', // Messaging Deployment
-                'https://enphase--uat.sandbox.my.site.com/ESWAPACChat1768284595700',
-                {
-                    scrt2URL: 'https://enphase--uat.sandbox.my.salesforce-scrt.com'
+                embeddedservice_bootstrap.init(
+                    '00DDh0000003ik2', // Org Id (UAT)
+                    'APAC_Chat', // Messaging Deployment
+                    'https://enphase--uat.sandbox.my.site.com/ESWAPACChat1768284595700',
+                    {
+                        scrt2URL: 'https://enphase--uat.sandbox.my.salesforce-scrt.com'
+                    }
+                );
+            } catch (err) {
+                console.error('Embedded Messaging init error:', err);
+            }
+        }
+
+        function setHiddenPrechatFields() {
+            try {
+                embeddedservice_bootstrap.prechatAPI.setHiddenPrechatFields({
+                    Chat_Source: 'ITK',
+                    Persona: 'Installer',
+                    Site_Type: 'Storage'
+                });
+            } catch (e) {
+                console.error('Prechat error:', e);
+            }
+        }
+
+        // Queue Position Handler
+        function handleQueuePosition(position, estimatedWaitTime) {
+            const container = document.getElementById('queue-position-container');
+            const positionNumber = document.getElementById('queue-position-number');
+            const positionMessage = document.getElementById('queue-position-message');
+
+            if (position > 0) {
+                // Show queue position
+                container.classList.add('visible');
+                positionNumber.textContent = position;
+
+                // Update message based on position and wait time
+                if (estimatedWaitTime) {
+                    const minutes = Math.ceil(estimatedWaitTime / 60);
+                    positionMessage.textContent = `Estimated wait time: ${minutes} minute${minutes !== 1 ? 's' : ''}`;
+                } else {
+                    positionMessage.textContent = 'Please wait, an agent will be with you shortly.';
                 }
-            );
-        } catch (err) {
-            console.error('Embedded Messaging init error:', err);
+
+                console.log(`Queue position: ${position}, Estimated wait: ${estimatedWaitTime}s`);
+            } else {
+                // Hide when position is 0 or conversation starts
+                container.classList.remove('visible');
+            }
         }
-    }
 
-    function setHiddenPrechatFields() {
-        try {
-            embeddedservice_bootstrap.prechatAPI.setHiddenPrechatFields({
-                Chat_Source: 'ITK',
-                Persona: 'Installer',
-                Site_Type: 'Storage'
-            });
-        } catch (e) {
-            console.error('Prechat error:', e);
-        }
-    }
+        // Listen for queue position updates
+        window.addEventListener('onEmbeddedMessagingReady', function () {
+            console.log('Embedded Messaging Ready');
+            setHiddenPrechatFields();
 
-    window.addEventListener('onEmbeddedMessagingReady', function () {
-        setHiddenPrechatFields();
-    });
-</script>
+            try {
+                // Subscribe to conversation events
+                embeddedservice_bootstrap.addEventHandler('onConversationQueuePositionUpdate', function(data) {
+                    console.log('Queue Position Update:', data);
 
-<script
-    type="text/javascript"
-    src="https://enphase--uat.sandbox.my.site.com/ESWAPACChat1768284595700/assets/js/bootstrap.min.js"
-    onload="initEmbeddedMessaging()">
-</script>
+                    if (data && data.queuePosition !== undefined) {
+                        handleQueuePosition(
+                            data.queuePosition,
+                            data.estimatedWaitTime
+                        );
+                    }
+                });
 
+                // Hide queue position when agent joins
+                embeddedservice_bootstrap.addEventHandler('onAgentJoined', function(data) {
+                    console.log('Agent Joined:', data);
+                    document.getElementById('queue-position-container').classList.remove('visible');
+                });
+
+                // Hide queue position when conversation ends
+                embeddedservice_bootstrap.addEventHandler('onConversationEnded', function(data) {
+                    console.log('Conversation Ended:', data);
+                    document.getElementById('queue-position-container').classList.remove('visible');
+                });
+
+                console.log('Queue position event handlers registered');
+            } catch (e) {
+                console.error('Error setting up queue position handlers:', e);
+            }
+        });
+    </script>
+
+    <script
+        type="text/javascript"
+        src="https://enphase--uat.sandbox.my.site.com/ESWAPACChat1768284595700/assets/js/bootstrap.min.js"
+        onload="initEmbeddedMessaging()">
+    </script>
 </body>
 </html>
